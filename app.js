@@ -2,30 +2,30 @@ const express = require('express');
 const app = express();
 const path = require('path');
 const port = 3000;
-const methodOverride = require('method-override');
-const formidable = require('express-formidable');
+//const methodOverride = require('method-override');
+//const formidable = require('express-formidable');
 const Joi = require('joi');
 const jwt = require('jsonwebtoken')
 const bcrypt = require('bcrypt')
-const contact = require('./schema');
-const user = require('./schema');
-const auth = require('auth');
+const { contact, user } = require('./schema.js')
+const auth = require('./auth');
 
 
-app.use(formidable());
+
+//app.use(formidable());
 
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
-app.use(methodOverride('_method'));
+//app.use(methodOverride('_method'));
 
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'ejs');
+//app.set('views', path.join(__dirname, 'views'));
+//app.set('view engine', 'ejs');
 
 
 const mongoose = require('mongoose');
 
-mongoose.connect('mongodb://localhost:27017/quizzes',
+mongoose.connect('mongodb://localhost:27017/lesson',
     {
         useNewUrlParser: true,
         useUnifiedTopology: true
@@ -41,7 +41,7 @@ db.once("open", function ()
 
 const joischema = Joi.object({
     name: Joi.string().min(3).required(),
-    number: Joi.number().min(10).max(14).required(),
+    number: Joi.number().min(99999999).max(9999999999).required(), //assuming 10 digit phone numbers in India
     email:Joi.string().min(4).email()
    
 });
@@ -54,7 +54,7 @@ const joischema2 = Joi.object({
 });
 
 
-
+//1. FIRST WE REGISTER THE AUTHORITY WHICH CAN DO CRUD OPERATIONS
 
 app.post('/register', async (req, res) => {
     const { error } = joischema2.validate(req.body);
@@ -80,6 +80,8 @@ app.post('/register', async (req, res) => {
         res.send(User._id);
     }
 });
+
+//2.LOGGING IN WITH REGISTERED USER AND GETTING JWT AUTHENTICATED
 
 app.post('/login', async (req, res) => {
 
@@ -110,6 +112,7 @@ app.post('/login', async (req, res) => {
     res.header('x-auth-token', token).send(User.id);
 });
 
+//3.ROUTE TO ADD A CONTACT
 
 app.post('/addcontact',auth, async (req, res) => {
     const { error } = joischema.validate(req.body);
@@ -135,18 +138,64 @@ app.post('/addcontact',auth, async (req, res) => {
     }
 });
 
+app.post('/multiplecontacts', auth, async function (req, res) {
+    try {
+        const { error } = joischema.validate(req.body);
+        if (error) {
+            return res.status(400).send(error.details[0].message);
+        }
+        var contactarray = [];
+        contactarray = req.body.contacts
+
+        const data = await contact.insertMany(contactarray);
+        res.send("successfull")
+    }
+    catch (err) {
+        console.log(err);
+    }
+})
 
 app.get('/me',auth,  async function (req, res) {
     const User = await user.findById(req.User._id).select('-password')
     res.send(User);
 })
 
-app.get('/getallcontact', auth, async function (req, res) {
-    
+//4.ROUTE TO FETCH ALL CONTACTS
+
+app.get('/getallcontacts',  async function (req, res) {
+    try {
+        const limitValue = 10 // 2 docs per page;
+        const skipValue = 0 //
+        const documents = await contact.find({}).limit(limitValue).skip(skipValue);
+        //for implementing pagination
+        res.send(documents);
+    }
+    catch (err) {
+        console.log(err);
+    }
 })
 
+//5. ROUTE TO FETCH SPECIFIC CONTACT BY NAME
 
-app.put('/updatecontact/:name',auth, (req, res) => {
+app.get('/getcontact/:name',  async function (req, res)
+{
+    try {
+        const cont = await contact.find({ name: req.params.name })
+        if (!cont) {
+            return res.status(404).send('not found name')
+        }
+        res.send(cont);
+    }
+    catch (err) {
+        console.error(err);
+    }
+    
+
+})
+
+//6. ROUTE TO UPDATE A CONTACT 
+
+app.put('/updatecontact',auth, async  (req, res) => {
 
     const { name, number, email } = req.body;
 
@@ -157,7 +206,7 @@ app.put('/updatecontact/:name',auth, (req, res) => {
         return;
     }
     else {
-        const Contact = contact.findOne({ name: name})
+        const Contact = await contact.findOne({ name: req.body.name})
         if (!Contact)
             return res.status(404).send('not found contact')
         else {
@@ -165,20 +214,24 @@ app.put('/updatecontact/:name',auth, (req, res) => {
                 Contact.name= name,
                 Contact.number= number,
                 Contact.email = email
-            
-            Contact.save();
-            res.end('updated succesfully');
         }
+         Contact.save();
+            res.end('updated succesfully');
     }
 
 })
 
-app.delete('/deletecontact/:name',auth, (req, res) => {
+//7.ROUTE TO DELETE A CONTACT
+
+app.delete('/deletecontact/:name',auth, async (req, res) => {
 
    
-        const Contact = contact.findOneAndDelete({ name: req.params.name})
-        if (!Contact)
-            return res.status(404).send('not found contact')
+        const Contact =await contact.findOneAndDelete({ name: req.params.name})
+    if (!Contact)
+        return res.status(404).send('not found contact')
+    else {
+        res.end("deleted succesfully")
+    }
 })
 
 
